@@ -1,7 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from collections import Collection 
-from individual import *
+from helloga.individual import *
 
 class Fitness(ABC) :
     @abstractmethod
