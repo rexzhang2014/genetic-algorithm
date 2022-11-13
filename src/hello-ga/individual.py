@@ -42,6 +42,10 @@ class Individual(ABC) :
         pass
 
 class BinaryIndividual(Individual) :
+    '''
+    Individual form for Binary Combinational Optimization problem. 
+    eg. Whether to put i-th item into the bag.
+    '''
     class KeyValueError(Exception) :
         def __init__(self, err_msg) :
             self.err_msg = err_msg
@@ -168,109 +172,18 @@ class BinaryIndividual(Individual) :
     #     return "".join(self.chromosome) == "".join(another.chromosome)
 
 
-class WeightedIndividual(Individual) :
-    def __init__(self, *args, **kwargs) :
-        Individual.__init__(self, *args, **kwargs)
-        self.cost = kwargs["cost"]
-        # self.reweigh()
-
-    def weights(self) :
-        indices = self.indexOfPositive()
-        w = [self.chromosome[i] for i in indices]
-        # for i in indices :
-        #     w.append(self.chromosome[i])
-        return indices, np.array(w)
-
-    def reweigh(self) :
-        self.chromosome = (np.array(self.chromosome) / sum(self.chromosome) * self.cost).tolist()
-
-    def mutate(self, t = 0.1, prob=None) :
-        
-        if prob is None :
-           prob = np.random.normal(0, 1, len(self.chromosome))
-        #    prob = (prob - np.mean(prob)) / (np.max(prob) - np.min(prob))
-           prob = 0 + (1 - (0)) * (prob - np.min(prob)) / (np.max(prob) - np.min(prob))
-        #    prob = np.random.rand(len(self.chromosome))
-        
-        factor = []
-        for p in prob : 
-            if abs(p) <= t : 
-                factor.append(0)
-            else :
-                factor.append(p)
-        factor = np.array(factor)
-        # factor = prob if prob < t else 1
-        action = lambda x, p : (1 - p ) * x + p * ( self.cost - x )
-    
-
-        chromosome = action(np.array(self.chromosome), factor)
-        
-        # Equal Rights: make every gene has the proportion of cost as they own the weights
-        chromosome = (chromosome / sum(chromosome) * self.cost).tolist()
-        generation = self.generation + 1
-        age = 0
-        
-        self.grow()
-
-        return WeightedIndividual(chromosome, generation, age, cost=self.cost)
-    
-    def __getitem__(self,k) :
-        if type(k) == int :
-            return WeightedIndividual(self.chromosome[k],self.generation,self.age, cost=self.cost)
-        if type(k) == slice :
-            return WeightedIndividual(self.chromosome[k],self.generation,self.age, cost=self.cost)
-        elif isinstance(k, Collection) :
-            s = pd.Series(self.chromosome)
-            return WeightedIndividual(s.values.tolist(), self.generation, self.age)
-        
-        else :
-            raise Individual.KeyValueError("Cannot get chromosome with a key type is not int, slice or Collection")
-
-    def __add__(self, another) :
-        # by default, chromosome is a list. In weighted individual , it is arithmetically added as vector(np.ndarray)
-        chromosome = (np.array(self.chromosome) + np.array(another.chromosome)).tolist()
-        generation = self.generation + 1
-        age = 0
-        
-        self.grow()
-        another.grow()
-
-        return WeightedIndividual(chromosome, generation, age, cost=self.cost)
-
-    def __truediv__(self, div) :
-        # div : a number or a np.ndarray
-        chromosome = (np.array(self.chromosome) / div).astype(float).tolist()
-        generation = self.generation 
-        age        = self.age
-
-        return WeightedIndividual(chromosome, generation, age, cost=self.cost)
-    def __mul__(self, mul) :
-        # mul : a number or a np.ndarray
-        chromosome = (np.array(self.chromosome) * mul).astype(float).tolist()
-        generation = self.generation 
-        age        = self.age
-
-        return WeightedIndividual(chromosome, generation, age, cost=self.cost)
-
-
 class IntegerIndividual(Individual) :
+    '''
+    Individual form for Integer Combinational Optimization problem.  
+    eg. Assign M people for i-th task.
+    '''
     def __init__(self, *args, **kwargs) :
         Individual.__init__(self, *args, **kwargs)
         if "domain" not in kwargs : 
-            raise InvalidArgs("")
+            raise ValueError("")
         self.domain = kwargs["domain"] # a list of integers 
         self.upper = max(self.domain)
         self.lower = min(self.domain)
-
-    # def weights(self) :
-    #     indices = self.indexOfPositive()
-    #     w = [self.chromosome[i] for i in indices]
-    #     # for i in indices :
-    #     #     w.append(self.chromosome[i])
-    #     return indices, np.array(w)
-
-    # def reweigh(self) :
-    #     self.chromosome = (np.array(self.chromosome) / sum(self.chromosome) * self.cost).tolist()
 
     def mutate(self, t = 0.1, prob=None) :
         
@@ -282,18 +195,13 @@ class IntegerIndividual(Individual) :
         if prob is None :
             prob = np.random.rand(chr_len)
 
-        factor = prob < t
-        # if prob < t :
-
-        # idx = random.sample(range(len(self.chromosome)), 1)[0]
+        factor = prob < t 
         for i in range(chr_len) :
             if factor[i] :
                 chr_lst = self.domain.copy()
                 chr_lst.remove(chromosome[i])
                 chromosome[i] = random.choice(chr_lst)
-        # fit = InSetFitness()
-        # chromosome = [ random.choice(- chromosome[i] if factor[i] else chromosome[i] for i in range(chr_len) ]
-        
+  
         generation = self.generation + 1
 
         age = 0

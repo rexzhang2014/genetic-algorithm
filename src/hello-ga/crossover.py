@@ -8,6 +8,9 @@ class CrossOver(ABC) :
 
 
 class SinglePointCrossOver(CrossOver) :
+    '''
+    Crossover at a single point
+    '''
     def run(self, individuals) :
         offsprings = []
         for i in individuals :
@@ -17,8 +20,6 @@ class SinglePointCrossOver(CrossOver) :
                 if i is j : 
                     # don't calculate twice
                     break
-                # elif i == j :
-                #     continue
                 else :
                     # swap the genes at position t and product 2 offsprings
                     offs1 = i[:t] + j[t:]
@@ -28,26 +29,17 @@ class SinglePointCrossOver(CrossOver) :
         return offsprings                     
 
 class UniformCrossOver(CrossOver) :
+    '''
+    Crossover for each position at certain probability
+    '''
     def run(self, individuals) :
-        offsprings = []
-        for i in individuals :
-            for j in individuals: 
-                t = np.random.choice(range(len(individuals)),1)[0]
-                # np.random.rand(1)[0]
-                if i is j : 
-                    # don't calculate twice
-                    break
-                else :
-                    # swap the genes at position t and product 2 offsprings
-                    offs1 = i[:t] + j[t:]
-                    offs2 = j[:t] + i[t:]
-                    offsprings.append(offs1)
-                    offsprings.append(offs2)
-        return offsprings                                          
+        raise ModuleNotFoundError('Not implemented yet.')
+        # return offsprings                                          
 
 class ArithmeticCrossOver(CrossOver) :
     '''
-    Only applicable for numeric individuals
+    Only applicable for numeric individuals.
+    Crossover by the value of two parents at a random portion. 
     '''
     def run(self, individuals) : 
         offsprings = []

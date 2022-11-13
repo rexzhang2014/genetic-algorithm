@@ -3,6 +3,7 @@ import pandas as pd
 from abc import ABC, abstractmethod 
 
 class Selector(ABC):
+    
     def __init__(self, constraints=None) :
         self.constraints = [lambda x : True] if constraints is None else constraints
     def __feasible__(self, individual) :
@@ -22,6 +23,9 @@ class Selector(ABC):
 
 
 class LeadingSelector(Selector) : 
+    '''
+    Select top ratio individuals by fitness value.
+    '''
     def __init__(self, ratio=0.5, constraints=None) :
 
         Selector.__init__(self,constraints)
@@ -35,6 +39,9 @@ class LeadingSelector(Selector) :
         return selection
 
 class LinearRankingSelector(Selector) : 
+    '''
+    Select top ratio individuals by linear ranking of fitness value.
+    '''
     def __init__(self, constraints=None) :
 
         Selector.__init__(self,constraints)
@@ -43,10 +50,7 @@ class LinearRankingSelector(Selector) :
         
         rank        = df["fitness"].rank(method='first',ascending=True)
         rank[rank==max(rank)-1]  = max(rank)
-        # n           = 1 / len(rank)
         prob        = 0.3 + (1 - 0.3) * (rank - 1) / (rank.max() - 1)
-        
-        # print(prob[prob<0]) 
         
         prob_bool   = prob.apply(func=lambda x : np.random.choice([0,1],1,p=[1-x, x]).astype(bool)).transpose()
         
