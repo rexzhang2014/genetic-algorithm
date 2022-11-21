@@ -1,7 +1,11 @@
 import pandas as pd 
-from helloga.crossover import SinglePointCrossOver
-from helloga.selector import LinearRankingSelector, LeadingSelector
-from helloga.fitness import SumFitness, WeightedSumFitness
+import numpy as np
+# from helloga.crossover import SinglePointCrossOver
+# from helloga.selector import LinearRankingSelector, LeadingSelector
+# from helloga.fitness import SumFitness, WeightedSumFitness
+from crossover import SinglePointCrossOver
+from selector import LinearRankingSelector, LeadingSelector
+from fitness import SumFitness, WeightedSumFitness
 
 from copy import deepcopy
 
@@ -38,31 +42,32 @@ class Species() :
         self.df = pd.concat([self.individuals, fitness],axis=1)
         self.df.columns = ["individuals", "fitness"]
         self.logger.debug("FITNESS - top:{}; sum: {}; avg:{}; population:{}".format(self.fitness.max(), self.fitness.sum(), self.fitness.mean(),self.population()))
-        return pd.concat([self.individuals, fitness],axis=1)
+        return self.df
 
     def select(self, func=None, verbose=True) :
+        '''
+        Run selector. func is an interface if the functional selector is provided. 
+        '''
         func = self.selector.select if func is None else func 
         self.df = func(self.df) #Select with df
         self.individuals = self.df["individuals"]
         self.fitness     = self.df["fitness"]
         if verbose :
             self.logger.debug("SELECTION -- top:{}; sum: {}; avg:{}; population:{}".format( self.fitness.max(), self.fitness.sum(), self.fitness.mean(),self.population()))
-            # x = self.sort()
-            # print(x.iloc[0,0])
-            # print(self.individuals.iloc[0])
-        
+
         return self.df
 
     def feasible(self, func=None) :
-        # at this step, only feasible individuals survive in feasibility constraints
+        '''
+        Call feasible check in selector. If there is not constraints defined, nothing will be removed in this step.
+        '''
         func = self.selector.feasible if func is None else func 
-        self.individuals = func(self.individuals)
-        # self.individuals = self.df["individuals"]
-        # self.fitness     = self.df["fitness"]
+        self.individuals = func(self.individuals) 
+
         self.logger.debug("FEASIBLE -- top:{}; sum: {}; avg:{}; population:{}".format(self.fitness.max(), self.fitness.sum(), self.fitness.mean(),self.population()))
         return self.individuals
 
-    def reproduce(self, func=None, *args, **kwargs ) :
+    def reproduce(self, *args, **kwargs ) :
         if len(args) > 1 :
             t = args[1] 
         elif "t" in kwargs.keys() :
@@ -70,16 +75,33 @@ class Species() :
         else :
             t = 0.5
         
+        xo_ratio = kwargs.get('xo_ratio', 1)
+
         # get the mutations generation. The mutations are also individuals can join crossover step
         mutations = self.individuals.apply(func = lambda x : x.mutate(t))
+        # add mutations in the species
         self.individuals = self.individuals.append(pd.Series(mutations)).reset_index(drop=True)
         self.logger.debug("MUTATION -- population: {}; generation: {}".format(self.population(), self.generations()))   
-        # get the crossover generation
-        func = self.crossover.run if func is None else func 
-        offsprings = func(self.individuals)
+
+        # get crossover population
+        if xo_ratio < 1 :
+            xo_idx = np.random.choice(range(self.population()), np.math.floor(self.population() * xo_ratio), replace=False)
+            if len(xo_idx) < 2 : 
+                xo_pop = self.individuals
+            else :
+                xo_pop = self.individuals[xo_idx].reset_index(drop=True)
+        else :
+            xo_pop = self.individuals
+
+        # run crossover operator
+        offsprings = self.crossover.run(xo_pop)
+        # add offsprings in the species
         self.individuals = self.individuals.append(pd.Series(offsprings)).reset_index(drop=True)
         self.logger.debug("XOVER -- population: {}; generation: {}".format(self.population(), self.generations()))
-        return mutations.append(pd.Series(offsprings)).reset_index(drop=True)
+
+        # return the mutations + offsprings
+        # return mutations.append(pd.Series(offsprings)).reset_index(drop=True)
+        return self.individuals
 
     def sort(self, func=None) :
         self.df.sort_values(by="fitness",ascending=False,inplace=True)
@@ -144,6 +166,8 @@ class Environment():
         maximum iterations of algorithm. The algorithm will stop when iteration reaches this number. 
     MAX_GENERATION: int
         maximum generation. The algorithm will stop when max generation in the species reaches this number.
+    CROSSOVER_RATIO: float
+        Randomly select a subset from current species by this ratio and do crossover only on this subset. 
 
     Methods
     ------------
@@ -160,14 +184,16 @@ class Environment():
         '''
         Initialize configurations and create a Species instance. Species is a set of individuals and interact with environment or operate on the set of individuals.
         '''
+        self.mut_rate = kwargs.get("mut_rate", 0.1)
+        self.epsilon = kwargs.get("epsilon", 1e-5)
+        self.verbose = kwargs.get('verbose', 0)
 
         self.CAPACITY = kwargs.get("CAPACITY", 1000)
         self.MAX_GENERATION = kwargs.get("MAX_GENERATION", 1000)
-        self.MAX_ITERATION  = kwargs.get("MAX_ITERATION", 1000)
-        self.mut_rate = kwargs.get("mut_rate", 0.1)
-        self.epsilon = kwargs.get("epsilon", 1e-5)
+        self.MAX_ITERATION  = kwargs.get("MAX_ITERATION", 1000)        
+        self.CROSSOVER_RATIO = kwargs.get("CROSSOVER_RATIO", 1)
         self.EXP_FITNESS = kwargs.get("EXP_FITNESS",1e6)
-        self.verbose = kwargs.get('verbose', 0)
+        self.START_WITH_SELECT = kwargs.get("START_WITH_SELECT", 0)
         # self.sel_rate = kwargs["sel_rate"] if "sel_rate" in kwargs.keys() else 0.5
 
         self.species = Species(
@@ -192,9 +218,14 @@ class Environment():
             
             # calculate fitness
             self.species.calculate_fitness()
-            # select from the fit individuals
-            self.species.select()
             
+            if i > 0 :
+                # do not select at start 
+                self.species.select()
+            elif self.START_WITH_SELECT > 0 :
+                # If we only consider feasible select from the fit individuals
+                self.species.select()
+
             # if the population is beyond environment's capability, the environment will punish the species, forcing the non-opitma disappeared.
             while self.species.population() >= self.CAPACITY :
                 self.__punish__()
@@ -209,7 +240,7 @@ class Environment():
                 break
             
             # Reproduce next generation, including mutation and crossover
-            self.species.reproduce(t=self.mut_rate)
+            self.species.reproduce(t=self.mut_rate,xo_ratio=self.CROSSOVER_RATIO)
             # Check or make the population be feasible under the pre-defined constraints
             self.species.feasible()
             
@@ -270,5 +301,8 @@ if __name__ == '__main__' :
         MAX_GENERATION=50,
         CAPACITY=100, 
         MAX_ITERATION=100,
-        log_level=logging.DEBUG
+        log_level=logging.DEBUG,
+        CROSSOVER_RATIO=0.5
     )
+
+  

@@ -1,8 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from collections import Collection 
-from helloga.individual import *
-
 class Fitness(ABC) :
     @abstractmethod
     def run(self, individual) :
@@ -22,7 +20,7 @@ class WeightedSumFitness(Fitness) :
     def __init__(self, weights=[]) :
         self.weights = weights
     
-    def run(self, individual : Individual) :
+    def run(self, individual) :
         a = np.array(individual.chromosome)
         b = np.array(self.weights)
         return np.dot(a, b.T)

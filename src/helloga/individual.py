@@ -6,8 +6,11 @@ import random
 from abc import ABC, abstractmethod
  
 class Individual(ABC) :
-    class KeyValueError(ValueError) :
-        pass
+    class KeyValueError(Exception) :
+        def __init__(self, err_msg) :
+            self.err_msg = err_msg
+        def __str__(self) :
+            return str(self.err_msg)
 
     def __init__(self, *args, **kwargs) :
         if args is not None and isinstance(args[0], Individual) and len(args) == 1:
@@ -28,29 +31,80 @@ class Individual(ABC) :
         return str(self.chromosome) 
  
     def __setitem__(self,k,v) :
-        pass
- 
+
+        if isinstance(k, Collection) :
+            s = pd.Series(self.chromosome)
+            s[k] = v
+            self.chromosome = s.values.tolist()
+        else : 
+            self.chromosome[k] = v
+
     def __getitem__(self,k) :
+        
+        if isinstance(k, Collection) :
+            s = pd.Series(self.chromosome)
+            return s[k].values.tolist()
+        else:
+            return self.chromosome[k]
+
+    def __eq__(self, another) :
+        a = np.array(self.chromosome)
+        b = np.array(another.chromosome)
+        return np.all(a==b)
+
+    def __ne__(self, another) :
+        a = np.array(self.chromosome)
+        b = np.array(another.chromosome)
+        return np.any(a!=b)
+
+    def copy(self) :
+        return deepcopy(self)
+
+    def sum(self) :
+        return sum(self.chromosome)
+
+    def grow(self) :
+        self.age += 1
+
+    def __hash__(self) -> int:
+        return super().__hash__()
+
+    def __len__(self) :
+        return len(self.chromosome)
+
+    def __add__(self, another) : 
         pass
- 
-    def __add__(self, another) :
-        pass
-    
+  
     def __truediv__(self, div) :
         pass
+
     def __mul__(self, mul) :
         pass
 
+    def indexOf(self, vals) :
+        if isinstance(vals, Collection) :
+            indices = []
+            for v in vals :
+                indices.append(self.chromosome.index(v))
+            return indices
+        else :
+            indices = []
+            for i in range(len(self.chromosome)) :
+                if self.chromosome[i] == vals :
+                    indices.append(i)
+            return indices
+            
+    def indexOfPositive(self) :
+        indices = []
+        for i in range(len(self.chromosome)) :
+            if self.chromosome[i] > 0 :
+                indices.append(i)
+        return indices
+
 class BinaryIndividual(Individual) :
     '''
-    Individual form for Binary Combinational Optimization problem. 
-    eg. Whether to put i-th item into the bag.
+    Individual form for Binary Combinational Optimization problem. See knapsack and TSP examples.
     '''
-    class KeyValueError(Exception) :
-        def __init__(self, err_msg) :
-            self.err_msg = err_msg
-        def __str__(self) :
-            str(self.err_msg)
 
     def __init__(self, *args, **kwargs) :
         if args is not None and isinstance(args[0], Individual) and len(args) == 1:
@@ -66,6 +120,7 @@ class BinaryIndividual(Individual) :
             self.fitness = 0
         else :
             raise Exception("non sufficient arguments")
+
     def mutate(self, t = 0.1, prob=None) :
         if prob is None :
             prob = np.random.rand(len(self.chromosome))
@@ -81,39 +136,6 @@ class BinaryIndividual(Individual) :
 
         return BinaryIndividual(chromosome.tolist(), generation, age)
 
-    def grow(self) :
-        self.age += 1
-    
-    def __setitem__(self,k,v) :
-        if type(k) == int :
-            self.chromosome[k] = v
-        elif type(k) == slice :
-            self.chromosome[k] = v
-        elif isinstance(k, Collection) :
-            s = pd.Series(self.chromosome)
-            s[k] = v
-            self.chromosome = s.values.tolist()
-
-        else : 
-            raise Individual.KeyValueError("Cannot set chromosome with a key type is not int, slice or Collection")
-
-
-    def __getitem__(self,k) :
-        if type(k) == int :
-            return BinaryIndividual(self.chromosome[k],self.generation,self.age)
-        elif type(k) == slice :
-            return BinaryIndividual(self.chromosome[k],self.generation,self.age)
-        elif isinstance(k, Collection) :
-            s = pd.Series(self.chromosome)
-            return BinaryIndividual(s.values.tolist(), self.generation, self.age)
-        
-        else :
-            raise Individual.KeyValueError("Cannot get chromosome with a key type is not int, slice or Collection")
-
-    def __str__(self) :
-        return str(self.chromosome)
-    # def __eq__(self, obj) :
-    #     return self.chromosome == obj.chromosome
     def __add__(self, another) :
         # implement concatenation of two chromosome so it is not mutable addition.
         chromosome = self.chromosome + another.chromosome
@@ -124,6 +146,18 @@ class BinaryIndividual(Individual) :
         another.grow()
 
         return BinaryIndividual(chromosome, generation, age)
+        
+    def __getitem__(self,k) :
+        if type(k) in [int, np.int32, np.int64] :
+            return BinaryIndividual(self.chromosome[k],self.generation,self.age)
+        elif type(k) == slice :
+            return BinaryIndividual(self.chromosome[k],self.generation,self.age)
+        elif isinstance(k, Collection) :
+            s = pd.Series(self.chromosome)
+            return BinaryIndividual(s.values.tolist(), self.generation, self.age)
+        
+        else :
+            raise Individual.KeyValueError("Cannot get chromosome with a key type is not int, slice or Collection")
 
     def __truediv__(self, div) :
         # div : a number or a np.ndarray
@@ -132,6 +166,7 @@ class BinaryIndividual(Individual) :
         age        = self.age
 
         return BinaryIndividual(chromosome, generation, age)
+
     def __mul__(self, mul) :
         # mul : a number or a np.ndarray
         chromosome = (np.array(self.chromosome) * mul).astype(float).tolist()
@@ -140,42 +175,11 @@ class BinaryIndividual(Individual) :
 
         return BinaryIndividual(chromosome, generation, age)
 
-    def indexOf(self, vals) :
-        if isinstance(vals, Collection) :
-            indices = []
-            for v in vals :
-                indices.append(self.chromosome.index(v))
-            return indices
-        else :
-            indices = []
-            for i in range(len(self.chromosome)) :
-                if self.chromosome[i] == vals :
-                    indices.append(i)
-            return indices
-    def indexOfPositive(self) :
-        indices = []
-        for i in range(len(self.chromosome)) :
-            if self.chromosome[i] > 0 :
-                indices.append(i)
-        return indices
-
-    def copy(self) :
-        return deepcopy(self)
-
-    def sum(self) :
-        return sum(self.chromosome)
-
-    def __len__(self) :
-        return len(self.chromosome)
-
-    # def __eq__(self, another) :
-    #     return "".join(self.chromosome) == "".join(another.chromosome)
 
 
 class IntegerIndividual(Individual) :
     '''
-    Individual form for Integer Combinational Optimization problem.  
-    eg. Assign M people for i-th task.
+    Individual form for Integer Combinational Optimization problem. See GCP problem.
     '''
     def __init__(self, *args, **kwargs) :
         Individual.__init__(self, *args, **kwargs)
@@ -186,10 +190,9 @@ class IntegerIndividual(Individual) :
         self.lower = min(self.domain)
 
     def mutate(self, t = 0.1, prob=None) :
-        
-        # if prob is None :
-        #    prob = random.sample(self.domain, 1)[0]
-
+        '''
+        mutate will generate new individual instances. 
+        '''
         chromosome = self.chromosome.copy()
         chr_len = len(self.chromosome)
         if prob is None :
@@ -198,28 +201,32 @@ class IntegerIndividual(Individual) :
         factor = prob < t 
         for i in range(chr_len) :
             if factor[i] :
-                chr_lst = self.domain.copy()
-                chr_lst.remove(chromosome[i])
-                chromosome[i] = random.choice(chr_lst)
+                chr_lst = [ x for x in self.domain if x != self.chromosome[i] ]
+                chromosome[i] = np.random.choice(chr_lst, 1, replace=False)[0]
   
         generation = self.generation + 1
 
-        age = 0
-        
         self.grow()
 
-        return IntegerIndividual(chromosome, generation, age, domain=self.domain)
-    
+        return IntegerIndividual(chromosome, generation, 0, domain=self.domain)
+   
     def __getitem__(self,k) :
-        if type(k) == int :
-            return self.chromosome[k] #IntegerIndividual(self.chromosome[k],self.generation,self.age, domain=self.domain)
-        if type(k) == slice :
-            # return self.chromosome[k] 
-            return IntegerIndividual(self.chromosome[k],self.generation,self.age, domain=self.domain)
+        if type(k) in [int, np.int32, np.int64] :
+            return IntegerIndividual(self.chromosome[k],self.generation, self.age, domain=self.domain)
+        elif type(k) == slice :
+            return IntegerIndividual(self.chromosome[k],self.generation, self.age, domain=self.domain)
         elif isinstance(k, Collection) :
             s = pd.Series(self.chromosome)
-            return IntegerIndividual(s.values.tolist(), self.generation, self.age)
+            return IntegerIndividual(s.values.tolist(), self.generation, self.age, domain=self.domain)
         
         else :
             raise Individual.KeyValueError("Cannot get chromosome with a key type is not int, slice or Collection")
+ 
+    def __add__(self, another) :
+        # implement concatenation of two chromosome so it is not mutable addition.
+        chromosome = self.chromosome + another.chromosome
+        generation = self.generation + 1 
+        self.grow()
+        another.grow()
 
+        return IntegerIndividual(chromosome, generation, 0, domain=self.domain)
