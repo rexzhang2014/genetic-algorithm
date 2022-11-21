@@ -1,11 +1,11 @@
 import pandas as pd 
 import numpy as np
-# from helloga.crossover import SinglePointCrossOver
-# from helloga.selector import LinearRankingSelector, LeadingSelector
-# from helloga.fitness import SumFitness, WeightedSumFitness
-from crossover import SinglePointCrossOver
-from selector import LinearRankingSelector, LeadingSelector
-from fitness import SumFitness, WeightedSumFitness
+from helloga.crossover import *
+from helloga.selector import *
+from helloga.fitness import *
+# from crossover import SinglePointCrossOver
+# from selector import LinearRankingSelector, LeadingSelector
+# from fitness import SumFitness, WeightedSumFitness
 
 from copy import deepcopy
 

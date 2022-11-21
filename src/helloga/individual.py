@@ -1,8 +1,7 @@
 import numpy as np 
 from copy import copy , deepcopy
 from collections import Iterable, Collection
-import pandas as pd
-import random
+import pandas as pd 
 from abc import ABC, abstractmethod
  
 class Individual(ABC) :
