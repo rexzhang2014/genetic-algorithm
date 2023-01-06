@@ -1,11 +1,11 @@
 import pandas as pd 
 import numpy as np
-from helloga.crossover import *
-from helloga.selector import *
-from helloga.fitness import *
-# from crossover import SinglePointCrossOver
-# from selector import LinearRankingSelector, LeadingSelector
-# from fitness import SumFitness, WeightedSumFitness
+# from helloga.crossover import *
+# from helloga.selector import *
+# from helloga.fitness import *
+from crossover import *
+from selector import *
+from fitness import *
 
 from copy import deepcopy
 
@@ -53,7 +53,7 @@ class Species() :
         self.individuals = self.df["individuals"]
         self.fitness     = self.df["fitness"]
         if verbose :
-            self.logger.debug("SELECTION -- top:{}; sum: {}; avg:{}; population:{}".format( self.fitness.max(), self.fitness.sum(), self.fitness.mean(),self.population()))
+            self.logger.debug("SELECTION -- top:{}; sum: {}; avg:{}; population:{}; diversity:{}".format( self.fitness.max(), self.fitness.sum(), self.fitness.mean(),self.population(),self.diversity()))
 
         return self.df
 
@@ -64,7 +64,7 @@ class Species() :
         func = self.selector.feasible if func is None else func 
         self.individuals = func(self.individuals) 
 
-        self.logger.debug("FEASIBLE -- top:{}; sum: {}; avg:{}; population:{}".format(self.fitness.max(), self.fitness.sum(), self.fitness.mean(),self.population()))
+        self.logger.debug("FEASIBLE -- top:{}; sum: {}; avg:{}; population:{}; diversity:{}".format(self.fitness.max(), self.fitness.sum(), self.fitness.mean(),self.population(),self.diversity()))
         return self.individuals
 
     def reproduce(self, *args, **kwargs ) :
@@ -81,7 +81,7 @@ class Species() :
         mutations = self.individuals.apply(func = lambda x : x.mutate(t))
         # add mutations in the species
         self.individuals = self.individuals.append(pd.Series(mutations)).reset_index(drop=True)
-        self.logger.debug("MUTATION -- population: {}; generation: {}".format(self.population(), self.generations()))   
+        self.logger.debug("MUTATION -- population: {}; generation: {}; diversity:{}".format(self.population(), self.generations(),self.diversity()))   
 
         # get crossover population
         if xo_ratio < 1 :
@@ -97,7 +97,7 @@ class Species() :
         offsprings = self.crossover.run(xo_pop)
         # add offsprings in the species
         self.individuals = self.individuals.append(pd.Series(offsprings)).reset_index(drop=True)
-        self.logger.debug("XOVER -- population: {}; generation: {}".format(self.population(), self.generations()))
+        self.logger.debug("XOVER -- population: {}; generation: {}; diversity:{}".format(self.population(), self.generations(),self.diversity()))
 
         # return the mutations + offsprings
         # return mutations.append(pd.Series(offsprings)).reset_index(drop=True)
@@ -127,7 +127,7 @@ class Species() :
         return max(self.individuals.apply(func=lambda x : x.generation))
     
     def diversity(self) :
-        return 0 #len(set(self.individuals.values.tolist()))
+        return len(set(self.individuals.values.tolist()))
 
     def copy(self) :
         return deepcopy(self)
@@ -140,6 +140,12 @@ class Species() :
         df_sorted = self.df.drop_duplicates(['individuals']).sort_values(by="fitness",ascending=False)
         return df_sorted['individuals'][:k]
 
+    def topF(self,k=1) :
+        
+        feasi = self.selector.feasible(self.individuals,0)
+        fit_val = feasi.apply(self.fitness_func.run)
+        df = pd.DataFrame([feasi, fit_val], columns=['solution', 'fitness']).sort_values('fitness', ascending=False)
+        return df['solution'][:k]
     # def __str__(self) :
     #     return str(individuals)
 
@@ -205,7 +211,7 @@ class Environment():
         )
 
     def __punish__(self) :
-        pun = LinearRankingSelector(self.species.selector.constraints)
+        pun = LinearRankingSelector(0.3,constraints=self.species.selector.constraints)
         # pun = LeadingSelector(0.3,self.species.selector.constraints)
         self.species.select(func=pun.select,verbose=False)
         # print("{} INFO: -- PUNISHMENT -- population: {}".format(self.species.population()))
@@ -219,17 +225,10 @@ class Environment():
             # calculate fitness
             self.species.calculate_fitness()
             
-            if i > 0 :
-                # do not select at start 
-                self.species.select()
-            elif self.START_WITH_SELECT > 0 :
-                # If we only consider feasible select from the fit individuals
-                self.species.select()
-
             # if the population is beyond environment's capability, the environment will punish the species, forcing the non-opitma disappeared.
             while self.species.population() >= self.CAPACITY :
                 self.__punish__()
-            self.species.logger.debug("PUNISHMENT -- population: {}, diversity:{}".format(self.species.population(), self.species.diversity()) )
+                self.species.logger.debug("PUNISHMENT -- population: {}, diversity:{}".format(self.species.population(), self.species.diversity()) )
 
             if self.species.max() >= self.EXP_FITNESS :
                 self.species.logger.info("EXP_FITNESS Achieved -- top fitness: {}".format(self.species.max()))
@@ -239,9 +238,13 @@ class Environment():
                 self.species.logger.info("MAX_GENERATION Achieved -- top fitness: {}".format(self.species.max()))
                 break
             
+            # Select which individuals can survive for next generation
+            self.species.select()
+
             # Reproduce next generation, including mutation and crossover
             self.species.reproduce(t=self.mut_rate,xo_ratio=self.CROSSOVER_RATIO)
-            # Check or make the population be feasible under the pre-defined constraints
+
+            # Exclude the individuals not satisfy all the constraints
             self.species.feasible()
             
             # Stop evolution if total/maximum fitness converges
@@ -250,11 +253,12 @@ class Environment():
             # else :
             #     last_fitness = self.species.sum()
 
-            
-        # self.species.select()
 
     def getSolution(self,k=1) :
         return self.species.topD(k)
+
+    def getFeasibleSolution(self,k=1) :
+        return self.species.topF(k)
 
     def evaluate(self) :
         # fitness, revenue, risk, cov = 

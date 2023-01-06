@@ -66,7 +66,7 @@ class Individual(ABC) :
         self.age += 1
 
     def __hash__(self) -> int:
-        return super().__hash__()
+        return ''.join([str(i) for i in self.chromosome]).__hash__()
 
     def __len__(self) :
         return len(self.chromosome)
